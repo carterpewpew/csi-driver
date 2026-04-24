@@ -754,6 +754,24 @@ var _ = Describe("Snapshots", func() {
 			Expect(res.GetNextToken()).To(BeEmpty())
 		})
 
+		It("should return an error if starting token exceeds total snapshots", func() {
+			res, err := controller.ListSnapshots(context.TODO(), &csi.ListSnapshotsRequest{
+				StartingToken: "15",
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(res).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("exceeds total snapshots"))
+		})
+
+		It("should return an error if max entries is negative", func() {
+			res, err := controller.ListSnapshots(context.TODO(), &csi.ListSnapshotsRequest{
+				MaxEntries: -1,
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(res).To(BeNil())
+			Expect(err.Error()).To(ContainSubstring("must not be negative"))
+		})
+
 		It("should return a subset if start token and max is set", func() {
 			res, err := controller.ListSnapshots(context.TODO(), &csi.ListSnapshotsRequest{
 				MaxEntries:    5,
@@ -762,6 +780,52 @@ var _ = Describe("Snapshots", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(res.Entries).To(HaveLen(5))
 			Expect(res.GetNextToken()).To(Equal("7"))
+		})
+
+		It("should return an error if starting token equals len(items)+1 (exact boundary)", func() {
+			res, err := controller.ListSnapshots(context.TODO(), &csi.ListSnapshotsRequest{
+				StartingToken: "11",
+			})
+			Expect(err).To(HaveOccurred())
+			Expect(res).To(BeNil())
+			Expect(status.Code(err)).To(Equal(codes.Aborted))
+			Expect(err.Error()).To(ContainSubstring("exceeds total snapshots"))
+		})
+
+		It("should treat starting token 0 as 1 and return all snapshots", func() {
+			res, err := controller.ListSnapshots(context.TODO(), &csi.ListSnapshotsRequest{
+				StartingToken: "0",
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(res.Entries).To(HaveLen(10))
+			Expect(res.GetNextToken()).To(BeEmpty())
+		})
+
+		It("should return the last snapshot when starting token equals len(items)", func() {
+			res, err := controller.ListSnapshots(context.TODO(), &csi.ListSnapshotsRequest{
+				StartingToken: "10",
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(res.Entries).To(HaveLen(1))
+			Expect(res.GetNextToken()).To(BeEmpty())
+		})
+
+		It("should paginate correctly across multiple pages", func() {
+			res, err := controller.ListSnapshots(context.TODO(), &csi.ListSnapshotsRequest{
+				MaxEntries:    5,
+				StartingToken: "1",
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(res.Entries).To(HaveLen(5))
+			Expect(res.GetNextToken()).To(Equal("6"))
+
+			res, err = controller.ListSnapshots(context.TODO(), &csi.ListSnapshotsRequest{
+				MaxEntries:    5,
+				StartingToken: res.GetNextToken(),
+			})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(res.Entries).To(HaveLen(5))
+			Expect(res.GetNextToken()).To(BeEmpty())
 		})
 	})
 })

@@ -827,6 +827,9 @@ func createSnapshotResponseFromItems(req *csi.ListSnapshotsRequest, items []snap
 
 		snapshotLength := int64(len(items))
 		maxLength := int64(req.MaxEntries)
+		if maxLength < 0 {
+			return nil, status.Errorf(codes.InvalidArgument, "max_entries=%d must not be negative", req.MaxEntries)
+		}
 		if maxLength == 0 {
 			maxLength = snapshotLength
 		}
@@ -835,6 +838,9 @@ func createSnapshotResponseFromItems(req *csi.ListSnapshotsRequest, items []snap
 			return nil, err
 		}
 		start = start - 1
+		if int64(start) >= snapshotLength {
+			return nil, status.Errorf(codes.Aborted, "startingToken=%d exceeds total snapshots=%d", start+1, snapshotLength)
+		}
 		end := int64(start) + maxLength
 
 		if end > snapshotLength {
